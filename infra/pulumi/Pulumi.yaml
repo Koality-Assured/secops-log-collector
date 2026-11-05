@@ -1,0 +1,6 @@
+name: secops-log-collector-infra
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Declarative Pulumi Infrastructure as Code for Koality Assured SecOps Log Collector

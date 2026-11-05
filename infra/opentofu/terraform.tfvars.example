@@ -1,0 +1,43 @@
+environment    = "prod"
+aws_region     = "us-west-2"
+project_prefix = "secops"
+
+tags = {
+  Project     = "SecOps-Log-Collector"
+  Environment = "Production"
+  ManagedBy   = "OpenTofu"
+  Owner       = "Koality-Assured-SecEng"
+}
+
+collectors = {
+  okta = {
+    rate_minutes    = 5
+    timeout_seconds = 300
+    memory_size     = 256
+    sinks           = ["logscale", "s3"]
+  }
+  crowdstrike = {
+    rate_minutes    = 5
+    timeout_seconds = 600
+    memory_size     = 512
+    sinks           = ["logscale", "s3"]
+  }
+  datadog = {
+    rate_minutes    = 5
+    timeout_seconds = 300
+    memory_size     = 256
+    sinks           = ["logscale", "s3"]
+  }
+  github = {
+    rate_minutes    = 15
+    timeout_seconds = 300
+    memory_size     = 256
+    sinks           = ["logscale", "s3"]
+  }
+  sentinelone = {
+    rate_minutes    = 5
+    timeout_seconds = 300
+    memory_size     = 256
+    sinks           = ["logscale", "s3"]
+  }
+}
