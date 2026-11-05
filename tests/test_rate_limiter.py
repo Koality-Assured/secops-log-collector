@@ -6,6 +6,7 @@ import pytest
 import requests
 
 from secops_collector.core.rate_limiter import (
+    ExecutionTimeoutError,
     RateLimitExceededError,
     RobustRateLimiter,
 )
@@ -105,3 +106,43 @@ def test_execute_transient_network_error(mock_sleep_recorder):
     assert result.status_code == 200
     assert mock_req.call_count == 2
     assert len(mock_sleep_recorder.sleeps) == 1
+
+
+def test_execute_timeout_deadline_exceeded(mock_sleep_recorder):
+    # Simulated Lambda remaining time = 20 seconds, reserve = 15 seconds
+    # Retry-After = 30 seconds -> total required = 45s > 20s -> triggers ExecutionTimeoutError
+    remaining_time = 20.0
+    limiter = RobustRateLimiter(
+        max_retries=3,
+        remaining_time_fn=lambda: remaining_time,
+        min_reserve_seconds=15.0,
+        sleep_fn=mock_sleep_recorder,
+    )
+
+    resp_429 = MagicMock(spec=requests.Response)
+    resp_429.status_code = 429
+    resp_429.headers = {"Retry-After": "30"}
+    mock_req = MagicMock(return_value=resp_429)
+
+    with pytest.raises(ExecutionTimeoutError) as exc_info:
+        limiter.execute(mock_req)
+
+    assert "Execution deadline imminent" in str(exc_info.value)
+    assert exc_info.value.remaining_seconds == 20.0
+    assert exc_info.value.required_backoff == 30.0
+    assert len(mock_sleep_recorder.sleeps) == 0  # Did not sleep into SIGKILL
+
+
+def test_execute_pre_execution_deadline_depleted(mock_sleep_recorder):
+    # If Lambda has only 10s left and reserve is 15s, reject immediately before initiating request
+    limiter = RobustRateLimiter(
+        remaining_time_fn=lambda: 10.0,
+        min_reserve_seconds=15.0,
+        sleep_fn=mock_sleep_recorder,
+    )
+
+    mock_req = MagicMock()
+    with pytest.raises(ExecutionTimeoutError):
+        limiter.execute(mock_req)
+
+    assert mock_req.call_count == 0

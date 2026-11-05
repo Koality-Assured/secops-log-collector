@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterator, List, Optional
 from dateutil import parser as dt_parser
 
 from secops_collector.core.models import LogBatch, LogEvent, TimeWindow
-from secops_collector.sources.base import BaseSource
+from secops_collector.sources.base import BaseSource, SourceAPIError, safe_parse_json
 
 logger = logging.getLogger("secops_collector.sources.github")
 
@@ -104,10 +104,18 @@ class GitHubAuditSource(BaseSource):
         next_url = None
         params = None
 
-        if checkpoint and checkpoint.get("next_url"):
-            next_url = checkpoint["next_url"]
-            logger.info("Resuming GitHub audit log collection from checkpoint cursor URL: %s", next_url)
-        else:
+        if checkpoint:
+            if checkpoint.get("next_url"):
+                next_url = checkpoint["next_url"]
+                logger.info("Resuming GitHub audit log collection from checkpoint cursor URL: %s", next_url)
+            elif checkpoint.get("last_timestamp"):
+                params = {
+                    "phrase": f"created:>={checkpoint['last_timestamp']}",
+                    "per_page": 100,
+                    "include": "all",
+                }
+                logger.info("Resuming GitHub audit log collection from checkpoint timestamp: %s", params["phrase"])
+        if not next_url and not params:
             start_iso = time_window.to_iso8601_start()
             params = {
                 "phrase": f"created:>={start_iso}",
@@ -129,13 +137,20 @@ class GitHubAuditSource(BaseSource):
 
             response = self.rate_limiter.execute(_query_github, operation_name="GitHub Audit Log query")
             if response.status_code != 200:
-                logger.error("GitHub Audit Log query returned HTTP %d: %s", response.status_code, response.text[:200])
-                break
+                err_msg = f"GitHub Audit Log query returned HTTP {response.status_code}: {response.text[:200]}"
+                logger.error(err_msg)
+                raise SourceAPIError(err_msg)
 
-            records = response.json()
+            records = safe_parse_json(response)
             if not isinstance(records, list) or not records:
                 logger.info("No audit records returned by GitHub. Collection finished.")
                 break
+
+            links = response.links
+            next_link_info = links.get("next")
+            candidate_next = next_link_info["url"] if (next_link_info and "url" in next_link_info) else None
+            if candidate_next == target_url:
+                candidate_next = None
 
             for rec in records:
                 if isinstance(rec, dict):
@@ -147,23 +162,23 @@ class GitHubAuditSource(BaseSource):
                         yield LogBatch(
                             source=self.source_id,
                             events=current_events,
-                            metadata={"last_timestamp": last_event_ts.isoformat() if last_event_ts else None},
+                            metadata={
+                                "last_timestamp": last_event_ts.isoformat() if last_event_ts else None,
+                                "next_url": candidate_next or target_url,
+                            },
                         )
                         current_events = []
 
-            links = response.links
-            next_link_info = links.get("next")
-            if next_link_info and "url" in next_link_info:
-                candidate_next = next_link_info["url"]
-                if candidate_next == target_url:
-                    break
-                next_url = candidate_next
-            else:
+            if not candidate_next:
                 break
+            next_url = candidate_next
 
         if current_events:
             yield LogBatch(
                 source=self.source_id,
                 events=current_events,
-                metadata={"last_timestamp": last_event_ts.isoformat() if last_event_ts else None},
+                metadata={
+                    "last_timestamp": last_event_ts.isoformat() if last_event_ts else None,
+                    "next_url": next_url,
+                },
             )

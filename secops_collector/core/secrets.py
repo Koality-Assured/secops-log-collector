@@ -7,6 +7,7 @@ Enforces strict secret sanitization to prevent accidental credential leakage in 
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -27,8 +28,13 @@ class BaseSecretProvider(ABC):
     """Abstract interface for credential and token retrieval."""
 
     @abstractmethod
-    def get_secret(self, secret_id: str) -> Dict[str, Any]:
+    def get_secret(self, secret_id: str, force_refresh: bool = False) -> Dict[str, Any]:
         """Retrieve and parse secret key-value pairs."""
+        pass
+
+    @abstractmethod
+    def invalidate(self, secret_id: Optional[str] = None) -> None:
+        """Invalidate cached credentials to force fresh resolution upon rotation."""
         pass
 
 
@@ -42,10 +48,14 @@ class DictionarySecretProvider(BaseSecretProvider):
         """Register a secret payload."""
         self._secrets[secret_id] = value
 
-    def get_secret(self, secret_id: str) -> Dict[str, Any]:
+    def get_secret(self, secret_id: str, force_refresh: bool = False) -> Dict[str, Any]:
         if secret_id in self._secrets:
             return self._secrets[secret_id]
         raise SecretNotFoundError(f"Secret '{secret_id}' not found in in-memory provider.")
+
+    def invalidate(self, secret_id: Optional[str] = None) -> None:
+        """No-op for static in-memory provider."""
+        pass
 
 
 class EnvironmentSecretProvider(BaseSecretProvider):
@@ -59,7 +69,7 @@ class EnvironmentSecretProvider(BaseSecretProvider):
     def __init__(self, prefix: str = "SECOPS_"):
         self.prefix = prefix
 
-    def get_secret(self, secret_id: str) -> Dict[str, Any]:
+    def get_secret(self, secret_id: str, force_refresh: bool = False) -> Dict[str, Any]:
         # Clean secret name for env var lookup
         clean_key = secret_id.upper().replace("-", "_").replace(".", "_")
 
@@ -89,6 +99,10 @@ class EnvironmentSecretProvider(BaseSecretProvider):
 
         raise SecretNotFoundError(f"Secret '{secret_id}' not found in environment variables.")
 
+    def invalidate(self, secret_id: Optional[str] = None) -> None:
+        """No-op for environment variables."""
+        pass
+
 
 class AWSSecretsManagerProvider(BaseSecretProvider):
     """Retrieves secrets from AWS Secrets Manager with local TTL-based caching."""
@@ -107,10 +121,19 @@ class AWSSecretsManagerProvider(BaseSecretProvider):
             self._client = boto3.client("secretsmanager", region_name=self.region_name)
         return self._client
 
-    def get_secret(self, secret_id: str) -> Dict[str, Any]:
+    def invalidate(self, secret_id: Optional[str] = None) -> None:
+        """Clear cached secret(s) to guarantee newly rotated values are retrieved."""
+        if secret_id is None:
+            self._cache.clear()
+            logger.info("Invalidated all secrets in AWS Secrets Manager cache.")
+        else:
+            if self._cache.pop(secret_id, None) is not None:
+                logger.info("Invalidated secret '%s' in AWS Secrets Manager cache.", secret_id)
+
+    def get_secret(self, secret_id: str, force_refresh: bool = False) -> Dict[str, Any]:
         now = time.time()
-        # Cache hit check
-        if secret_id in self._cache:
+        # Cache hit check (bypassed if force_refresh is requested)
+        if not force_refresh and secret_id in self._cache:
             data, timestamp = self._cache[secret_id]
             if now - timestamp < self.ttl_seconds:
                 return data
@@ -123,7 +146,14 @@ class AWSSecretsManagerProvider(BaseSecretProvider):
 
         secret_str = response.get("SecretString")
         if not secret_str:
-            raise SecretNotFoundError(f"Secret '{secret_id}' contains no SecretString.")
+            secret_binary = response.get("SecretBinary")
+            if secret_binary:
+                if isinstance(secret_binary, bytes):
+                    secret_str = secret_binary.decode("utf-8")
+                else:
+                    secret_str = base64.b64decode(secret_binary).decode("utf-8")
+            else:
+                raise SecretNotFoundError(f"Secret '{secret_id}' contains neither SecretString nor SecretBinary.")
 
         try:
             parsed = json.loads(secret_str)

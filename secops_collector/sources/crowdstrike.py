@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterator, List, Optional
 from dateutil import parser as dt_parser
 
 from secops_collector.core.models import LogBatch, LogEvent, TimeWindow
-from secops_collector.sources.base import BaseSource
+from secops_collector.sources.base import BaseSource, SourceAPIError, safe_parse_json
 
 logger = logging.getLogger("secops_collector.sources.crowdstrike")
 
@@ -150,14 +150,21 @@ class CrowdStrikeSource(BaseSource):
 
             response = self.rate_limiter.execute(_query_endpoint, operation_name="CrowdStrike Spotlight query")
             if response.status_code != 200:
-                logger.error("CrowdStrike query failed (HTTP %d): %s", response.status_code, response.text[:200])
-                break
+                if response.status_code == 401:
+                    self._cached_bearer_token = None
+                err_msg = f"CrowdStrike query failed (HTTP {response.status_code}): {response.text[:200]}"
+                logger.error(err_msg)
+                raise SourceAPIError(err_msg)
 
-            result = response.json()
+            result = safe_parse_json(response)
             resources = result.get("resources", [])
             if not resources:
                 logger.info("No more resources returned by CrowdStrike. Ending collection.")
                 break
+
+            meta = result.get("meta", {})
+            pagination = meta.get("pagination", {})
+            next_after = pagination.get("after")
 
             for rec in resources:
                 if isinstance(rec, dict):
@@ -168,13 +175,9 @@ class CrowdStrikeSource(BaseSource):
                         yield LogBatch(
                             source=self.source_id,
                             events=current_events,
-                            metadata={"after_cursor": last_cursor},
+                            metadata={"after_cursor": next_after or cursor},
                         )
                         current_events = []
-
-            meta = result.get("meta", {})
-            pagination = meta.get("pagination", {})
-            next_after = pagination.get("after")
 
             if not next_after or next_after == cursor:
                 logger.debug("Reached end of CrowdStrike pagination sequence.")
@@ -187,5 +190,5 @@ class CrowdStrikeSource(BaseSource):
             yield LogBatch(
                 source=self.source_id,
                 events=current_events,
-                metadata={"after_cursor": last_cursor},
+                metadata={"after_cursor": last_cursor or cursor},
             )

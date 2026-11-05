@@ -89,7 +89,10 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:*:*:*"
+        Resource = [
+          aws_cloudwatch_log_group.lambda[each.key].arn,
+          "${aws_cloudwatch_log_group.lambda[each.key].arn}:*"
+        ]
       },
       {
         Sid    = "SecretsManagerRead"
@@ -98,7 +101,10 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = aws_secretsmanager_secret.collector[each.key].arn
+        Resource = [
+          aws_secretsmanager_secret.collector[each.key].arn,
+          "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:${var.project_prefix}-sink-*-credentials*"
+        ]
       },
       {
         Sid    = "S3DataLakeIngest"
@@ -108,6 +114,14 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "s3:GetObject"
         ]
         Resource = "${aws_s3_bucket.data_lake.arn}/*"
+      },
+      {
+        Sid    = "S3DataLakeBucket"
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = aws_s3_bucket.data_lake.arn
       }
     ]
   })

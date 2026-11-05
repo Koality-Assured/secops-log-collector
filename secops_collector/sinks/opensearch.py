@@ -89,9 +89,19 @@ class OpenSearchSink(BaseSink):
         items = res_json.get("items", [])
 
         if has_errors:
-            error_count = sum(1 for item in items if any(action.get("error") for action in item.values()))
-            logger.warning("OpenSearch indexed with %d item-level errors out of %d items.", error_count, len(items))
-            return len(items) - error_count
+            error_details = []
+            for item in items:
+                for action_name, action_data in item.items():
+                    if isinstance(action_data, dict) and action_data.get("error"):
+                        err_obj = action_data.get("error")
+                        doc_id = action_data.get("_id", "unknown")
+                        error_details.append(f"doc {doc_id}: {err_obj}")
+            err_msg = (
+                f"OpenSearch bulk ingest encountered {len(error_details)} item-level errors "
+                f"out of {len(items)} items: {'; '.join(error_details[:5])}"
+            )
+            logger.error(err_msg)
+            raise RuntimeError(err_msg)
 
         logger.info("Successfully indexed %d records into OpenSearch (%s)", len(items), index_name)
         return len(items)

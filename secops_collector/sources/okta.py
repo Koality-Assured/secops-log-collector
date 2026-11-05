@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterator, List, Optional
 from dateutil import parser as dt_parser
 
 from secops_collector.core.models import LogBatch, LogEvent, TimeWindow
-from secops_collector.sources.base import BaseSource
+from secops_collector.sources.base import BaseSource, SourceAPIError, safe_parse_json
 
 logger = logging.getLogger("secops_collector.sources.okta")
 
@@ -93,10 +93,18 @@ class OktaSource(BaseSource):
         next_url = None
         params = None
 
-        if checkpoint and checkpoint.get("next_url"):
-            next_url = checkpoint["next_url"]
-            logger.info("Resuming Okta collection from checkpoint cursor URL: %s", next_url)
-        else:
+        if checkpoint:
+            if checkpoint.get("next_url"):
+                next_url = checkpoint["next_url"]
+                logger.info("Resuming Okta collection from checkpoint cursor URL: %s", next_url)
+            elif checkpoint.get("last_timestamp"):
+                params = {
+                    "since": checkpoint["last_timestamp"],
+                    "until": time_window.to_iso8601_end(),
+                    "limit": 1000,
+                }
+                logger.info("Resuming Okta collection from checkpoint timestamp: %s", params["since"])
+        if not next_url and not params:
             # ISO format: YYYY-MM-DDTHH:mm:ss.sssZ
             params = {
                 "since": time_window.to_iso8601_start(),
@@ -124,13 +132,21 @@ class OktaSource(BaseSource):
             response = self.rate_limiter.execute(_call_api, operation_name="Okta Logs API query")
 
             if response.status_code != 200:
-                logger.error("Okta API returned HTTP %d: %s", response.status_code, response.text[:200])
-                break
+                err_msg = f"Okta API returned HTTP {response.status_code}: {response.text[:200]}"
+                logger.error(err_msg)
+                raise SourceAPIError(err_msg)
 
-            records = response.json()
+            records = safe_parse_json(response)
             if not isinstance(records, list) or not records:
                 logger.info("Okta API returned zero new records. Ending pagination.")
                 break
+
+            # RFC 5988 next link parsing
+            links = response.links
+            next_link_info = links.get("next")
+            candidate_next = next_link_info["url"] if (next_link_info and "url" in next_link_info) else None
+            if candidate_next == target_url:
+                candidate_next = None
 
             for rec in records:
                 if isinstance(rec, dict):
@@ -142,28 +158,25 @@ class OktaSource(BaseSource):
                         yield LogBatch(
                             source=self.source_id,
                             events=current_events,
-                            metadata={"last_timestamp": last_event_ts.isoformat() if last_event_ts else None},
+                            metadata={
+                                "last_timestamp": last_event_ts.isoformat() if last_event_ts else None,
+                                "next_url": candidate_next or target_url,
+                            },
                         )
                         current_events = []
 
-            # RFC 5988 next link parsing
-            links = response.links
-            next_link_info = links.get("next")
-            if next_link_info and "url" in next_link_info:
-                candidate_next = next_link_info["url"]
-                # Safeguard against circular or identical self-referencing next links
-                if candidate_next == target_url:
-                    logger.debug("Next link equals current link; reached end of stream.")
-                    break
-                next_url = candidate_next
-            else:
-                logger.debug("No next Link header returned by Okta.")
+            if not candidate_next:
+                logger.debug("No subsequent next Link header returned by Okta.")
                 break
+            next_url = candidate_next
 
         # Yield any remaining collected events
         if current_events:
             yield LogBatch(
                 source=self.source_id,
                 events=current_events,
-                metadata={"last_timestamp": last_event_ts.isoformat() if last_event_ts else None},
+                metadata={
+                    "last_timestamp": last_event_ts.isoformat() if last_event_ts else None,
+                    "next_url": next_url,
+                },
             )

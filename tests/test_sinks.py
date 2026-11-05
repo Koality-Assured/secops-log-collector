@@ -141,3 +141,33 @@ def test_opensearch_sink(sample_batch, mock_sleep_recorder):
     meta_action = json.loads(lines[0])
     assert meta_action["index"]["_index"] == "logs-okta-2026.11.05"
     assert meta_action["index"]["_id"] == "evt_101"
+
+
+def test_opensearch_sink_partial_bulk_errors_raises(sample_batch, mock_sleep_recorder):
+    sink = OpenSearchSink()
+    config = CollectorConfig(source_type="okta", sink_types=["opensearch"])
+    rate_limiter = RobustRateLimiter(sleep_fn=mock_sleep_recorder)
+    sink.initialize(
+        config,
+        {
+            "opensearch_url": "https://opensearch.example.internal:9200",
+            "token": "es_token_xyz",
+        },
+        rate_limiter,
+    )
+
+    mock_resp = MagicMock(spec=requests.Response)
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "errors": True,
+        "items": [
+            {"index": {"_id": "evt_101", "status": 201}},
+            {"index": {"_id": "evt_102", "status": 400, "error": {"type": "mapper_parsing_exception", "reason": "failed to parse"}}},
+        ],
+    }
+    sink.session.post = MagicMock(return_value=mock_resp)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        sink.write(sample_batch)
+
+    assert "OpenSearch bulk ingest encountered 1 item-level errors" in str(exc_info.value)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterator, Optional
 
@@ -10,6 +11,50 @@ import requests
 
 from secops_collector.core.models import CollectorConfig, LogBatch, TimeWindow
 from secops_collector.core.rate_limiter import RobustRateLimiter
+
+
+class SourceAPIError(Exception):
+    """Raised when an external log source API returns an unrecoverable HTTP status or error."""
+
+    pass
+
+
+MAX_RESPONSE_BYTES = 25 * 1024 * 1024  # 25 MB safety ceiling to protect Lambda memory
+
+
+def safe_parse_json(response: requests.Response, max_bytes: int = MAX_RESPONSE_BYTES) -> Any:
+    """Safely decode JSON response while guarding against memory exhaustion."""
+    headers = getattr(response, "headers", None)
+    if headers and hasattr(headers, "get"):
+        content_length = headers.get("Content-Length")
+        if content_length:
+            try:
+                if int(content_length) > max_bytes:
+                    raise SourceAPIError(
+                        f"Response Content-Length ({content_length} bytes) exceeds safety ceiling ({max_bytes} bytes)."
+                    )
+            except ValueError:
+                pass
+
+    content = getattr(response, "content", None)
+    if isinstance(content, (bytes, bytearray, str)):
+        if len(content) > max_bytes:
+            raise SourceAPIError(
+                f"Response body ({len(content)} bytes) exceeds safety ceiling ({max_bytes} bytes)."
+            )
+        try:
+            return json.loads(content)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise SourceAPIError(f"Failed to decode API JSON response: {exc}") from exc
+
+    # Fallback if response mock or stream provides callable json()
+    if hasattr(response, "json") and callable(response.json):
+        try:
+            return response.json()
+        except Exception as exc:
+            raise SourceAPIError(f"Failed to decode API JSON response: {exc}") from exc
+
+    return None
 
 
 def round_dt(dt: datetime.datetime, delta: datetime.timedelta) -> datetime.datetime:

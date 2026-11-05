@@ -62,6 +62,33 @@ def test_aws_secrets_manager_provider_with_caching():
     assert creds2 == {"token": "aws_token_xyz"}
     assert mock_boto_client.get_secret_value.call_count == 1
 
+    # Invalidate forces fresh client fetch
+    provider.invalidate("my-sec-secret")
+    mock_boto_client.get_secret_value.return_value = {
+        "SecretString": json.dumps({"token": "rotated_token_456"}),
+    }
+    creds3 = provider.get_secret("my-sec-secret")
+    assert creds3 == {"token": "rotated_token_456"}
+    assert mock_boto_client.get_secret_value.call_count == 2
+
+    # force_refresh=True also bypasses cache
+    mock_boto_client.get_secret_value.return_value = {
+        "SecretString": json.dumps({"token": "force_refreshed_789"}),
+    }
+    creds4 = provider.get_secret("my-sec-secret", force_refresh=True)
+    assert creds4 == {"token": "force_refreshed_789"}
+    assert mock_boto_client.get_secret_value.call_count == 3
+
+
+def test_aws_secrets_manager_provider_binary_secret():
+    mock_boto_client = MagicMock()
+    mock_boto_client.get_secret_value.return_value = {
+        "SecretBinary": json.dumps({"token": "binary_token"}).encode("utf-8"),
+    }
+    provider = AWSSecretsManagerProvider(client=mock_boto_client, ttl_seconds=60)
+    creds = provider.get_secret("binary-secret")
+    assert creds == {"token": "binary_token"}
+
 
 def test_get_secret_provider_factory():
     p1 = get_secret_provider("memory", mock_secrets={"test": {"a": 1}})

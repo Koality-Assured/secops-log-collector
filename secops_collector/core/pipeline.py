@@ -7,10 +7,10 @@ source event collection, batch formatting, multi-sink dispatch, and telemetry ge
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from secops_collector.core.models import CollectorConfig, PipelineMetrics, TimeWindow
-from secops_collector.core.rate_limiter import RobustRateLimiter
+from secops_collector.core.rate_limiter import ExecutionTimeoutError, RobustRateLimiter
 from secops_collector.core.secrets import BaseSecretProvider, get_secret_provider
 from secops_collector.core.state import BaseStateStore, get_state_store
 from secops_collector.sinks import get_sink
@@ -36,6 +36,7 @@ class IngestionPipeline:
         secret_provider: Optional[BaseSecretProvider] = None,
         state_store: Optional[BaseStateStore] = None,
         rate_limiter: Optional[RobustRateLimiter] = None,
+        remaining_time_fn: Optional[Callable[[], float]] = None,
     ):
         self.config = config
         self.secret_provider = secret_provider or get_secret_provider(
@@ -48,7 +49,10 @@ class IngestionPipeline:
         self.rate_limiter = rate_limiter or RobustRateLimiter(
             max_retries=config.max_retries,
             base_backoff_seconds=config.backoff_factor,
+            remaining_time_fn=remaining_time_fn,
         )
+        if remaining_time_fn is not None:
+            self.rate_limiter.set_remaining_time_fn(remaining_time_fn)
 
         self.source: BaseSource = get_source(config.source_type)
         self.sinks: List[BaseSink] = [get_sink(st) for st in config.sink_types]
@@ -90,8 +94,12 @@ class IngestionPipeline:
         self,
         explicit_time_window: Optional[TimeWindow] = None,
         override_checkpoint: Optional[Dict[str, Any]] = None,
+        remaining_time_fn: Optional[Callable[[], float]] = None,
     ) -> PipelineMetrics:
         """Execute the ingestion pipeline."""
+        if remaining_time_fn is not None:
+            self.rate_limiter.set_remaining_time_fn(remaining_time_fn)
+
         logger.info(
             "Starting ingestion pipeline for source='%s' to sinks=%s",
             self.config.source_type,
@@ -119,26 +127,52 @@ class IngestionPipeline:
             event_count = 0
             latest_checkpoint: Optional[Dict[str, Any]] = None
 
-            for batch in self.source.collect(time_window=time_window, checkpoint=checkpoint):
-                batch_count += 1
-                self.metrics.pages_processed += 1
-                batch_events = batch.record_count
+            try:
+                for batch in self.source.collect(time_window=time_window, checkpoint=checkpoint):
+                    batch_count += 1
+                    self.metrics.pages_processed += 1
+                    batch_events = batch.record_count
 
-                if batch_events > 0:
-                    event_count += batch_events
+                    if batch_events > 0:
+                        event_count += batch_events
 
-                    # 5. Dispatch batch to all configured sinks
-                    for sink in self.sinks:
-                        delivered = sink.write(batch)
-                        logger.debug("Sink '%s' accepted %d records.", sink.sink_id, delivered)
+                        # 5. Dispatch batch to all configured sinks
+                        for sink in self.sinks:
+                            delivered = sink.write(batch)
+                            if delivered != batch_events:
+                                raise PipelineExecutionError(
+                                    f"Sink '{sink.sink_id}' delivered {delivered} records; expected {batch_events}."
+                                )
+                            logger.debug("Sink '%s' accepted %d records.", sink.sink_id, delivered)
 
-                    self.metrics.batches_delivered += 1
-                    self.metrics.events_collected += batch_events
+                        self.metrics.batches_delivered += 1
+                        self.metrics.events_collected += batch_events
 
-                # Save incremental checkpoint if available
-                if batch.metadata:
-                    latest_checkpoint = batch.metadata
-                    self.state_store.save_checkpoint(self.config.source_type, latest_checkpoint)
+                    # Save incremental checkpoint ONLY after full batch acceptance
+                    if batch.metadata:
+                        latest_checkpoint = batch.metadata
+                        self.state_store.save_checkpoint(self.config.source_type, latest_checkpoint)
+
+            except ExecutionTimeoutError as timeout_exc:
+                logger.warning(
+                    "Execution deadline reached during ingestion: %s. Initiating graceful shutdown.",
+                    timeout_exc,
+                )
+                for sink in self.sinks:
+                    try:
+                        sink.flush()
+                        sink.close()
+                    except Exception as flush_err:
+                        logger.error("Error during timeout graceful flush: %s", flush_err)
+
+                self.metrics.status = "timeout_graceful"
+                self.metrics.error_message = str(timeout_exc)
+                logger.info(
+                    "Graceful shutdown complete: %d events across %d batches safely delivered before timeout.",
+                    self.metrics.events_collected,
+                    self.metrics.batches_delivered,
+                )
+                return self.metrics
 
             # 6. Flush and finalize sinks
             for sink in self.sinks:

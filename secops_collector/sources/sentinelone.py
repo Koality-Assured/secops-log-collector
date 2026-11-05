@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterator, List, Optional
 from dateutil import parser as dt_parser
 
 from secops_collector.core.models import LogBatch, LogEvent, TimeWindow
-from secops_collector.sources.base import BaseSource
+from secops_collector.sources.base import BaseSource, SourceAPIError, safe_parse_json
 
 logger = logging.getLogger("secops_collector.sources.sentinelone")
 
@@ -117,14 +117,18 @@ class SentinelOneSource(BaseSource):
 
             response = self.rate_limiter.execute(_query_s1, operation_name="SentinelOne Activities query")
             if response.status_code != 200:
-                logger.error("SentinelOne API returned HTTP %d: %s", response.status_code, response.text[:200])
-                break
+                err_msg = f"SentinelOne API returned HTTP {response.status_code}: {response.text[:200]}"
+                logger.error(err_msg)
+                raise SourceAPIError(err_msg)
 
-            result = response.json()
+            result = safe_parse_json(response)
             records = result.get("data", [])
             if not records:
                 logger.info("No records returned by SentinelOne. Finished collection.")
                 break
+
+            pagination = result.get("pagination", {})
+            next_cursor = pagination.get("nextCursor")
 
             for rec in records:
                 if isinstance(rec, dict):
@@ -135,12 +139,9 @@ class SentinelOneSource(BaseSource):
                         yield LogBatch(
                             source=self.source_id,
                             events=current_events,
-                            metadata={"cursor": last_cursor},
+                            metadata={"cursor": next_cursor or cursor},
                         )
                         current_events = []
-
-            pagination = result.get("pagination", {})
-            next_cursor = pagination.get("nextCursor")
 
             if not next_cursor or next_cursor == cursor:
                 logger.debug("No nextCursor found in SentinelOne response.")
@@ -153,5 +154,5 @@ class SentinelOneSource(BaseSource):
             yield LogBatch(
                 source=self.source_id,
                 events=current_events,
-                metadata={"cursor": last_cursor},
+                metadata={"cursor": last_cursor or cursor},
             )

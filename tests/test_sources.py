@@ -7,7 +7,7 @@ import requests
 
 from secops_collector.core.models import CollectorConfig, TimeWindow
 from secops_collector.core.rate_limiter import RobustRateLimiter
-from secops_collector.sources.base import round_dt
+from secops_collector.sources.base import SourceAPIError, round_dt, safe_parse_json
 from secops_collector.sources.crowdstrike import CrowdStrikeSource
 from secops_collector.sources.datadog import DatadogSource
 from secops_collector.sources.github import GitHubAuditSource
@@ -246,3 +246,32 @@ def test_sentinelone_source_collection(mock_sleep_recorder):
     event = batches[0].events[0]
     assert event.id == "s1_act_1"
     assert event.attributes["threat_id"] == "threat_999"
+
+
+def test_sources_raise_on_non_200_http_status(mock_sleep_recorder):
+    # Test that Okta raises SourceAPIError on HTTP 400 Bad Request
+    okta = OktaSource()
+    okta.initialize(CollectorConfig(source_type="okta"), {"okta_token": "tok"}, RobustRateLimiter(max_retries=0))
+    resp_400 = MagicMock(spec=requests.Response)
+    resp_400.status_code = 400
+    resp_400.text = "Bad Request"
+    okta.session.get = MagicMock(return_value=resp_400)
+
+    tw = TimeWindow(
+        start_time=datetime(2026, 11, 5, 12, 0, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 11, 5, 12, 5, 0, tzinfo=timezone.utc),
+    )
+
+    import pytest
+    with pytest.raises(SourceAPIError) as exc_info:
+        list(okta.collect(time_window=tw))
+    assert "Okta API returned HTTP 400" in str(exc_info.value)
+
+
+def test_safe_parse_json_memory_safety():
+    resp_oversized = MagicMock(spec=requests.Response)
+    resp_oversized.headers = {"Content-Length": "30000000"}  # 30 MB
+    import pytest
+    with pytest.raises(SourceAPIError) as exc_info:
+        safe_parse_json(resp_oversized, max_bytes=1000000)
+    assert "exceeds safety ceiling" in str(exc_info.value)

@@ -7,7 +7,7 @@ import pytest
 
 from secops_collector.core.models import CollectorConfig, LogBatch, LogEvent, TimeWindow
 from secops_collector.core.pipeline import IngestionPipeline, PipelineExecutionError
-from secops_collector.core.rate_limiter import RobustRateLimiter
+from secops_collector.core.rate_limiter import ExecutionTimeoutError, RobustRateLimiter
 from secops_collector.core.secrets import DictionarySecretProvider
 from secops_collector.core.state import InMemoryStateStore
 
@@ -102,3 +102,74 @@ def test_pipeline_failure_handling(mock_sleep_recorder):
 
     assert "API gateway disconnected" in str(exc_info.value)
     assert pipeline.metrics.status == "failed"
+
+
+def test_pipeline_graceful_shutdown_on_timeout():
+    config = CollectorConfig(source_type="okta", sink_types=["logscale"], secrets_backend="memory", state_backend="memory")
+    secrets = DictionarySecretProvider({
+        "secops-okta-credentials": {"okta_url": "https://example.okta.com", "okta_token": "tok_123"},
+        "secops-sink-logscale-credentials": {"token": "ls_tok"},
+    })
+    state = InMemoryStateStore()
+    pipeline = IngestionPipeline(config=config, secret_provider=secrets, state_store=state)
+
+    now = datetime(2026, 11, 5, 12, 0, 0, tzinfo=timezone.utc)
+    batch1 = LogBatch(
+        source="okta",
+        events=[LogEvent(timestamp=now, source="okta", event_type="login")],
+        metadata={"next_url": "https://example.okta.com/page2"},
+    )
+
+    def _generator_with_timeout(*args, **kwargs):
+        yield batch1
+        raise ExecutionTimeoutError("Lambda timeout reserve depleted", remaining_seconds=12.0, required_backoff=60.0)
+
+    pipeline.source.collect = MagicMock(side_effect=_generator_with_timeout)
+    for sink in pipeline.sinks:
+        sink.write = MagicMock(return_value=1)
+        sink.flush = MagicMock()
+        sink.close = MagicMock()
+
+    metrics = pipeline.run()
+
+    assert metrics.status == "timeout_graceful"
+    assert metrics.events_collected == 1
+    assert metrics.batches_delivered == 1
+    # Checkpoint was saved before timeout
+    saved = state.get_checkpoint("okta")
+    assert saved["next_url"] == "https://example.okta.com/page2"
+    # Sinks were flushed
+    for sink in pipeline.sinks:
+        sink.flush.assert_called_once()
+        sink.close.assert_called_once()
+
+
+def test_pipeline_partial_sink_delivery_raises():
+    config = CollectorConfig(source_type="okta", sink_types=["logscale"], secrets_backend="memory", state_backend="memory")
+    secrets = DictionarySecretProvider({
+        "secops-okta-credentials": {"okta_url": "https://example.okta.com", "okta_token": "tok_123"},
+        "secops-sink-logscale-credentials": {"token": "ls_tok"},
+    })
+    state = InMemoryStateStore()
+    pipeline = IngestionPipeline(config=config, secret_provider=secrets, state_store=state)
+
+    now = datetime(2026, 11, 5, 12, 0, 0, tzinfo=timezone.utc)
+    batch1 = LogBatch(
+        source="okta",
+        events=[
+            LogEvent(timestamp=now, source="okta", event_type="login"),
+            LogEvent(timestamp=now, source="okta", event_type="logout"),
+        ],
+        metadata={"next_url": "https://example.okta.com/page2"},
+    )
+    pipeline.source.collect = MagicMock(return_value=iter([batch1]))
+    # Sink only accepts 1 out of 2 records
+    for sink in pipeline.sinks:
+        sink.write = MagicMock(return_value=1)
+
+    with pytest.raises(PipelineExecutionError) as exc_info:
+        pipeline.run()
+
+    assert "delivered 1 records; expected 2" in str(exc_info.value)
+    # Checkpoint was NOT saved
+    assert state.get_checkpoint("okta") is None

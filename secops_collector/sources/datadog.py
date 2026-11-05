@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterator, List, Optional
 from dateutil import parser as dt_parser
 
 from secops_collector.core.models import LogBatch, LogEvent, TimeWindow
-from secops_collector.sources.base import BaseSource
+from secops_collector.sources.base import BaseSource, SourceAPIError, safe_parse_json
 
 logger = logging.getLogger("secops_collector.sources.datadog")
 
@@ -121,14 +121,19 @@ class DatadogSource(BaseSource):
 
             response = self.rate_limiter.execute(_query_datadog, operation_name="Datadog Logs search")
             if response.status_code != 200:
-                logger.error("Datadog search returned HTTP %d: %s", response.status_code, response.text[:200])
-                break
+                err_msg = f"Datadog search returned HTTP {response.status_code}: {response.text[:200]}"
+                logger.error(err_msg)
+                raise SourceAPIError(err_msg)
 
-            result = response.json()
+            result = safe_parse_json(response)
             data = result.get("data", [])
             if not data:
                 logger.info("No more events returned by Datadog. Pagination complete.")
                 break
+
+            meta = result.get("meta", {})
+            page_info = meta.get("page", {})
+            next_cursor = page_info.get("after")
 
             for rec in data:
                 if isinstance(rec, dict):
@@ -139,13 +144,9 @@ class DatadogSource(BaseSource):
                         yield LogBatch(
                             source=self.source_id,
                             events=current_events,
-                            metadata={"cursor": last_cursor},
+                            metadata={"cursor": next_cursor or cursor},
                         )
                         current_events = []
-
-            meta = result.get("meta", {})
-            page_info = meta.get("page", {})
-            next_cursor = page_info.get("after")
 
             if not next_cursor or next_cursor == cursor:
                 logger.debug("No subsequent cursor returned by Datadog API.")
@@ -158,5 +159,5 @@ class DatadogSource(BaseSource):
             yield LogBatch(
                 source=self.source_id,
                 events=current_events,
-                metadata={"cursor": last_cursor},
+                metadata={"cursor": last_cursor or cursor},
             )

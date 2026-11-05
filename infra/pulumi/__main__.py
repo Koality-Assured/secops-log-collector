@@ -93,31 +93,34 @@ for product, settings in collector_products.items():
         ]
     )
 
-    # CloudWatch Logs Policy
+    # CloudWatch Logs Policy (scoped to specific log group)
     cw_log_policy_doc = aws.iam.get_policy_document(
         statements=[
             aws.iam.GetPolicyDocumentStatementArgs(
                 sid="CloudWatchLogging",
                 effect="Allow",
                 actions=["logs:CreateLogStream", "logs:PutLogEvents"],
-                resources=["arn:aws:logs:*:*:*"],
+                resources=[f"arn:aws:logs:{region_name}:{account_id}:log-group:/aws/lambda/{lambda_name}:*"],
             )
         ]
     )
 
-    # Secrets Access Policy (least privilege: only this product's secret)
+    # Secrets Access Policy (least privilege: this product's secret and sink secrets)
     secrets_policy_doc = aws.iam.get_policy_document(
         statements=[
             aws.iam.GetPolicyDocumentStatementArgs(
                 sid="SecretsManagerRead",
                 effect="Allow",
                 actions=["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-                resources=[secret.arn],
+                resources=[
+                    secret.arn,
+                    f"arn:aws:secretsmanager:{region_name}:{account_id}:secret:{project_prefix}-sink-*-credentials*",
+                ],
             )
         ]
     )
 
-    # S3 Data Lake & Checkpoint Access Policy
+    # S3 Data Lake & Checkpoint Access Policy (least privilege: bucket items + list bucket)
     s3_policy_doc = aws.iam.get_policy_document(
         statements=[
             aws.iam.GetPolicyDocumentStatementArgs(
@@ -125,7 +128,13 @@ for product, settings in collector_products.items():
                 effect="Allow",
                 actions=["s3:PutObject", "s3:GetObject"],
                 resources=[data_lake_bucket.arn.apply(lambda arn: f"{arn}/*")],
-            )
+            ),
+            aws.iam.GetPolicyDocumentStatementArgs(
+                sid="S3DataLakeList",
+                effect="Allow",
+                actions=["s3:ListBucket"],
+                resources=[data_lake_bucket.arn],
+            ),
         ]
     )
 

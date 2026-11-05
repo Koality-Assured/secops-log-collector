@@ -76,7 +76,7 @@ def _parse_explicit_window(event: Optional[Dict[str, Any]]) -> Optional[TimeWind
     return None
 
 
-def lambda_handler(event: Any, context: Any) -> Dict[str, Any]:
+def lambda_handler(event: Any, context: Any = None) -> Dict[str, Any]:
     """Main AWS Lambda handler entrypoint."""
     logger.info("Received Lambda invocation event: %s", type(event))
 
@@ -89,12 +89,16 @@ def lambda_handler(event: Any, context: Any) -> Dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
+    remaining_time_fn = None
+    if context is not None and hasattr(context, "get_remaining_time_in_millis"):
+        remaining_time_fn = lambda: context.get_remaining_time_in_millis() / 1000.0
+
     try:
         config = _parse_event_config(event_dict)
         explicit_window = _parse_explicit_window(event_dict)
 
-        pipeline = IngestionPipeline(config=config)
-        metrics = pipeline.run(explicit_time_window=explicit_window)
+        pipeline = IngestionPipeline(config=config, remaining_time_fn=remaining_time_fn)
+        metrics = pipeline.run(explicit_time_window=explicit_window, remaining_time_fn=remaining_time_fn)
 
         response_body = {
             "status": metrics.status,
@@ -104,6 +108,8 @@ def lambda_handler(event: Any, context: Any) -> Dict[str, Any]:
             "pages_processed": metrics.pages_processed,
             "duration_seconds": round(metrics.duration_seconds, 3),
         }
+        if metrics.error_message:
+            response_body["message"] = metrics.error_message
 
         return {
             "statusCode": 200,
