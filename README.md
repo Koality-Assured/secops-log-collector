@@ -1,18 +1,19 @@
 <div align="center">
 
-![SECOPS LOG COLLECTOR Banner](assets/secops-log-collector-banner.svg)
+![SecOps Log Collector Banner](assets/secops-log-collector-banner.svg)
 
-# Secops Log Collector
+# SecOps Log Collector
 
 <p align="center">
-  <img src="assets/secops-log-collector-logo.svg" alt="SECOPS LOG COLLECTOR Logo" width="128" height="128" />
+  <img src="assets/secops-log-collector-logo.svg" alt="SecOps Log Collector Logo" width="128" height="128" />
 </p>
 
-**Serverless Event-Driven Telemetry Ingest: Okta, CrowdStrike, Datadog & GitHub to LogScale, S3 & OS**
+**Serverless Event-Driven Telemetry Ingest Engine: Okta, CrowdStrike, Datadog & GitHub to LogScale, S3 & OS**
 
 [![CI](https://github.com/Koality-Assured/secops-log-collector/actions/workflows/ci.yml/badge.svg)](https://github.com/Koality-Assured/secops-log-collector/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Domain: secops--log--collector](https://img.shields.io/badge/domain-secops--log--collector-blueviolet.svg)](#)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](pyproject.toml)
+[![Domain: Secops-Log-Collector](https://img.shields.io/badge/domain-secops-log-collector-blueviolet.svg)]()
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://conventionalcommits.org)
 
 </div>

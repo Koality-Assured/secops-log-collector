@@ -9,14 +9,21 @@
       <stop offset="0%" stop-color="#0284C7" />
       <stop offset="100%" stop-color="#10B981" />
     </linearGradient>
+    <linearGradient id="core-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284C7" />
+      <stop offset="50%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="6" result="blur" />
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
 
+  <!-- Background Backdrop -->
   <rect width="1280" height="400" fill="url(#bg)" />
 
+  <!-- Tech Matrix Blueprint Grid -->
   <g opacity="0.12" stroke="#0284C7" stroke-width="1">
     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
       <path d="M 40 0 L 0 0 0 40" fill="none" />
@@ -24,62 +31,85 @@
     <rect width="1280" height="400" fill="url(#grid)" />
   </g>
 
+  <!-- High-Tech Data Stream Vectors -->
   <g opacity="0.25">
-    <path d="M -50 120 Q 350 40 640 180 T 1330 200" fill="none" stroke="#0284C7" stroke-width="2" />
-    <path d="M -50 260 Q 420 320 780 220 T 1330 150" fill="none" stroke="#10B981" stroke-width="2" />
+    <path d="M -50 100 Q 300 60 640 180 T 1330 220" fill="none" stroke="#0284C7" stroke-width="2" />
+    <path d="M -50 280 Q 400 340 780 240 T 1330 140" fill="none" stroke="#10B981" stroke-width="2" />
   </g>
 
+  <!-- Left: Hero Graphic Emblematics -->
   <g transform="translate(180, 200)">
+    <!-- Concentric Orbit Rings -->
     <circle cx="0" cy="0" r="140" fill="none" stroke="#334155" stroke-width="1.5" stroke-dasharray="6 8" opacity="0.4" />
     <circle cx="0" cy="0" r="110" fill="none" stroke="#0284C7" stroke-width="2" stroke-dasharray="30 15 60 15" opacity="0.7" />
     <circle cx="0" cy="0" r="80" fill="none" stroke="#10B981" stroke-width="2" opacity="0.6" />
+    
+    <!-- Outer Spoke Nodes -->
     <circle cx="0" cy="-140" r="10" fill="#0B0F19" stroke="#0284C7" stroke-width="3" />
     <circle cx="140" cy="0" r="10" fill="#0B0F19" stroke="#10B981" stroke-width="3" />
     <circle cx="0" cy="140" r="10" fill="#0B0F19" stroke="#F59E0B" stroke-width="3" />
     <circle cx="-140" cy="0" r="10" fill="#0B0F19" stroke="#0284C7" stroke-width="3" />
-    <g transform="translate(-40, -45)" filter="url(#glow)">
-      
-        <!-- Funnel Ingestion Streams -->
-        <path d="M 10 0 L 70 0 L 50 40 L 30 40 Z" fill="url(#accent-cyan)" opacity="0.8" />
-        <line x1="40" y1="40" x2="40" y2="60" stroke="#10B981" stroke-width="3" stroke-dasharray="4 3" />
-        <!-- Data Storage Cylinder -->
-        <ellipse cx="40" cy="65" rx="35" ry="12" fill="#1E293B" stroke="#0284C7" stroke-width="2" />
-        <path d="M 5 65 v 25 c 0 6.6 15.7 12 35 12 s 35 -5.4 35 -12 v -25" fill="none" stroke="#0284C7" stroke-width="2" />
-        <path d="M 5 80 c 0 6.6 15.7 12 35 12 s 35 -5.4 35 -12" fill="none" stroke="#10B981" stroke-width="1.5" />
-        <ellipse cx="40" cy="65" rx="20" ry="7" fill="#0284C7" opacity="0.4" />
+
+    <!-- Central Iconography Transformed -->
+    <g transform="translate(-256, -256)">
+
+    <!-- Streaming Log Telemetry & Signal Wave Motif -->
+    <rect x="150" y="160" width="212" height="170" rx="14" fill="#0B0F19" stroke="#0284C7" stroke-width="4" />
+    <!-- Stream Pulse Wave -->
+    <path d="M 165 245 L 205 245 L 220 185 L 238 295 L 256 220 L 272 265 L 288 205 L 304 245 L 345 245" 
+          fill="none" stroke="#F59E0B" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+    <!-- Parsing Marker Indices -->
+    <circle cx="220" cy="185" r="5" fill="#0284C7" />
+    <circle cx="238" cy="295" r="5" fill="#10B981" />
+    <circle cx="288" cy="205" r="5" fill="#0284C7" />
+    <!-- Data Ingestion Status Bars -->
+    <rect x="175" y="178" width="18" height="6" rx="2" fill="#10B981" />
+    <rect x="200" y="178" width="28" height="6" rx="2" fill="#0284C7" />
+    <rect x="235" y="178" width="12" height="6" rx="2" fill="#F59E0B" />
+    <!-- Stream Vector Flow Lines -->
+    <line x1="165" y1="305" x2="345" y2="305" stroke="#10B981" stroke-width="2" stroke-dasharray="8 6" />
         
     </g>
   </g>
 
+  <!-- Right: Typography & Capability Badges -->
   <g transform="translate(420, 100)">
-    <rect x="0" y="0" width="350" height="26" rx="13" fill="#1E293B" stroke="#334155" stroke-width="1" />
+    <!-- Overline Category Capsule -->
+    <rect x="0" y="0" width="324" height="26" rx="13" fill="#1E293B" stroke="#334155" stroke-width="1" />
     <circle cx="14" cy="13" r="5" fill="#0284C7" filter="url(#glow)" />
     <text x="28" y="17" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" letter-spacing="1.5">KOALITY-ASSURED • TELEMETRY INGESTION</text>
 
-    <text x="0" y="72" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="46" font-weight="900" letter-spacing="1">SECOPS LOG COLLECTOR</text>
+    <!-- Project Title -->
+    <text x="0" y="72" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="48" font-weight="900" letter-spacing="1">SECOPS LOG COLLECTOR</text>
 
-    <text x="0" y="110" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="400">Serverless Event-Driven Telemetry Ingest: Okta, CrowdStrike, Datadog & GitHub to LogScale, S3 & OS</text>
+    <!-- Subtitle -->
+    <text x="0" y="110" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="17" font-weight="400">Serverless Event-Driven Telemetry Ingest Engine: Okta, CrowdStrike, Datadog &amp; GitHub to LogScale, S3 &amp; OS</text>
 
+    <!-- Capability Chips -->
     <g transform="translate(0, 150)">
+      <!-- Chip 1: EventBridge Ingest -->
       <g transform="translate(0, 0)">
-        <rect x="0" y="0" width="224" height="38" rx="8" fill="#111827" stroke="#0284C7" stroke-width="1.5" />
+        <rect x="0" y="0" width="210" height="38" rx="8" fill="#111827" stroke="#0284C7" stroke-width="1.5" />
         <circle cx="18" cy="19" r="4" fill="#0284C7" />
-        <text x="32" y="24" fill="#E2E8F0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">EventBridge Serverless</text>
+        <text x="32" y="24" fill="#E2E8F0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">EventBridge Ingest</text>
       </g>
-      <g transform="translate(236, 0)">
-        <rect x="0" y="0" width="184" height="38" rx="8" fill="#111827" stroke="#10B981" stroke-width="1.5" />
+      <!-- Chip 2: Multi-SaaS Logs -->
+      <g transform="translate(224, 0)">
+        <rect x="0" y="0" width="183" height="38" rx="8" fill="#111827" stroke="#10B981" stroke-width="1.5" />
         <circle cx="18" cy="19" r="4" fill="#10B981" />
-        <text x="32" y="24" fill="#E2E8F0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">Multi-SaaS Ingest</text>
+        <text x="32" y="24" fill="#E2E8F0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">Multi-SaaS Logs</text>
       </g>
-      <g transform="translate(432, 0)">
-        <rect x="0" y="0" width="192" height="38" rx="8" fill="#111827" stroke="#F59E0B" stroke-width="1.5" />
+      <!-- Chip 3: LogScale &amp; S3 -->
+      <g transform="translate(421, 0)">
+        <rect x="0" y="0" width="165" height="38" rx="8" fill="#111827" stroke="#F59E0B" stroke-width="1.5" />
         <circle cx="18" cy="19" r="4" fill="#F59E0B" />
-        <text x="32" y="24" fill="#E2E8F0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">LogScale / S3 / OS</text>
+        <text x="32" y="24" fill="#E2E8F0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">LogScale &amp; S3</text>
       </g>
-      <g transform="translate(636, 0)">
-        <rect x="0" y="0" width="224" height="38" rx="8" fill="#111827" stroke="#8B5CF6" stroke-width="1.5" />
-        <circle cx="18" cy="19" r="4" fill="#8B5CF6" />
-        <text x="32" y="24" fill="#E2E8F0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">Dual Pulumi & Tofu IaC</text>
+      <!-- Chip 4: Pulumi &amp; OpenTofu -->
+      <g transform="translate(600, 0)">
+        <rect x="0" y="0" width="201" height="38" rx="8" fill="#111827" stroke="#38BDF8" stroke-width="1.5" />
+        <circle cx="18" cy="19" r="4" fill="#38BDF8" />
+        <text x="32" y="24" fill="#E2E8F0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">Pulumi &amp; OpenTofu</text>
       </g>
     </g>
   </g>
