@@ -1,12 +1,21 @@
-# SecOps Log Collector
+<div align="center">
 
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=flat-square&logo=githubactions)](https://github.com/koality-assured/secops-log-collector/actions)
-[![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-blue?style=flat-square&logo=python)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square)](LICENSE)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square)](https://github.com/astral-sh/ruff)
-[![Security Standard](https://img.shields.io/badge/Security-Sanitized%20&%20Adversarial%20Reviewed-success?style=flat-square)](SECURITY.md)
+![SECOPS LOG COLLECTOR Banner](assets/secops-log-collector-banner.svg)
 
-Production-grade, serverless, event-driven security log collection engine designed for cloud security engineering teams. Automatically polls, normalizes, checkpoints, and ingests enterprise audit trails and threat detection telemetry into security data lakes and SIEM analytics platforms.
+# Secops Log Collector
+
+<p align="center">
+  <img src="assets/secops-log-collector-logo.svg" alt="SECOPS LOG COLLECTOR Logo" width="128" height="128" />
+</p>
+
+**Serverless Event-Driven Telemetry Ingest: Okta, CrowdStrike, Datadog & GitHub to LogScale, S3 & OS**
+
+[![CI](https://github.com/Koality-Assured/secops-log-collector/actions/workflows/ci.yml/badge.svg)](https://github.com/Koality-Assured/secops-log-collector/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![Domain: secops--log--collector](https://img.shields.io/badge/domain-secops--log--collector-blueviolet.svg)](#)
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://conventionalcommits.org)
+
+</div>
 
 ---
 
